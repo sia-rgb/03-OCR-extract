@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>截图OCR提取工具 - 支持Ctrl+V粘贴截图</title>
+    <!-- Tesseract.js 核心库 -->
+    <script src="https://unpkg.com/tesseract.js@v4.0.2/dist/tesseract.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.2rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .header .icon {
+            font-size: 1.8rem;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+
+        .feature {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+
+        .paste-section {
+            margin-bottom: 30px;
+            padding: 40px 20px;
+            border: 3px solid #e6f0ff;
+            border-radius: 12px;
+            background-color: #f9fbff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            text-align: center;
+        }
+
+        .paste-btn {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+        }
+
+        .paste-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(76, 175, 80, 0.4);
+        }
+
+        .paste-hint {
+            font-size: 0.9rem;
+            color: #666;
+            text-align: center;
+            background-color: #f0f8ff;
+            padding: 10px 15px;
+            border-radius: 6px;
+            border-left: 3px solid #2196F3;
+            max-width: 500px;
+        }
+
+        .paste-hint kbd {
+            background-color: #f5f5f5;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            margin: 0 2px;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+        }
+
+        .auto-extract-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .auto-extract-toggle label {
+            font-size: 0.9rem;
+            color: #555;
+            cursor: pointer;
+        }
+
+        .auto-extract-toggle input {
+            cursor: pointer;
+        }
+
+        .paste-indicator {
+            color: #4CAF50;
+            font-weight: bold;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .preview-section {
+            margin-bottom: 30px;
+            display: none;
+        }
+
+        .preview-section h3 {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .preview-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .preview-image {
+            flex: 1;
+            min-width: 300px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .preview-image img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .image-info {
+            flex: 1;
+            min-width: 300px;
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .info-item {
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .info-value {
+            color: #333;
+        }
+
+        .processing-section {
+            margin-bottom: 30px;
+            text-align: center;
+            display: none;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .status-message {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .result-section {
+            display: none;
+        }
+
+        .result-section h3 {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .result-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .copy-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .copy-btn:hover {
+            background-color: #45a049;
+        }
+
+        .clear-btn {
+            background-color: #f44336;
+            color: white;
+        }
+
+        .clear-btn:hover {
+            background-color: #d32f2f;
+        }
+
+        .result-text {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+            line-height: 1.5;
+            font-size: 1rem;
+        }
+
+        .error-section {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .error-section h4 {
+            color: #d32f2f;
+            margin-bottom: 8px;
+        }
+
+        .error-section p {
+            color: #666;
+        }
+
+        .language-selector {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+
+        .language-option {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+
+        .language-option input {
+            cursor: pointer;
+        }
+
+        .language-option label {
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+
+        .format-options {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            justify-content: center;
+        }
+
+        .format-option {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+
+        .format-option input {
+            cursor: pointer;
+        }
+
+        .format-option label {
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: #555;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9rem;
+            border-top: 1px solid #eee;
+            margin-top: 30px;
+        }
+
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8rem;
+            }
+
+            .main-content {
+                padding: 20px;
+            }
+
+            .preview-container {
+                flex-direction: column;
+            }
+
+            .preview-image,
+            .image-info {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><span class="icon">📷</span> 截图OCR提取工具</h1>
+            <p>零安装，纯前端，截图后直接粘贴即可提取文字</p>
+            <div class="features">
+                <span class="feature">🚀 无需安装</span>
+                <span class="feature">📋 一键粘贴</span>
+                <span class="feature">🔤 中英文识别</span>
+                <span class="feature">⚡ 自动提取</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- 错误提示 -->
+            <div class="error-section" id="errorSection">
+                <h4>⚠️ 错误</h4>
+                <p id="errorMessage"></p>
+            </div>
+
+            <!-- 粘贴区域 -->
+            <div class="paste-section">
+                <div class="paste-hint">
+                    💡 <strong>快捷操作：</strong>截图后按 <kbd>Ctrl</kbd> + <kbd>V</kbd> 直接粘贴，或点击下方按钮
+                </div>
+
+                <button class="paste-btn" id="pasteBtn" onclick="handlePasteClick()">
+                    <span class="icon">📋</span> 粘贴截图并提取文字
+                </button>
+
+                <div class="auto-extract-toggle">
+                    <input type="checkbox" id="autoExtract" checked>
+                    <label for="autoExtract">粘贴后自动开始提取</label>
+                </div>
+
+                <div class="paste-indicator" id="pasteIndicator">
+                    ✅ 已检测到剪贴板中的图片，开始提取中...
+                </div>
+
+                <!-- 语言选择 -->
+                <div class="language-selector">
+                    <div class="language-option">
+                        <input type="checkbox" id="langChinese" checked>
+                        <label for="langChinese">中文 (chi_sim)</label>
+                    </div>
+                    <div class="language-option">
+                        <input type="checkbox" id="langEnglish" checked>
+                        <label for="langEnglish">英文 (eng)</label>
+                    </div>
+                </div>
+
+                <!-- 格式化选项 -->
+                <div class="format-options">
+                    <div class="format-option">
+                        <input type="checkbox" id="formatRemoveLineBreaks" checked>
+                        <label for="formatRemoveLineBreaks">优化格式（去除断行）</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 预览区域 -->
+            <div class="preview-section" id="previewSection">
+                <h3>图片预览</h3>
+                <div class="preview-container">
+                    <div class="preview-image">
+                        <img id="previewImage" src="" alt="预览图片">
+                    </div>
+                    <div class="image-info">
+                        <div class="info-item">
+                            <span class="info-label">文件名:</span>
+                            <span class="info-value" id="fileName"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">文件大小:</span>
+                            <span class="info-value" id="fileSize"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">图片尺寸:</span>
+                            <span class="info-value" id="imageDimensions"></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">文件格式:</span>
+                            <span class="info-value" id="fileFormat"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 处理进度 -->
+            <div class="processing-section" id="processingSection">
+                <div class="spinner"></div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="status-message" id="statusMessage">正在初始化OCR引擎...</div>
+            </div>
+
+            <!-- 结果区域 -->
+            <div class="result-section" id="resultSection">
+                <h3>
+                    提取结果
+                    <div class="result-actions">
+                        <button class="action-btn copy-btn" onclick="copyResult()">📋 复制</button>
+                        <button class="action-btn clear-btn" onclick="clearAll()">🗑️ 清空</button>
+                    </div>
+                </h3>
+                <div class="result-text" id="resultText"></div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Powered by <a href="https://github.com/naptha/tesseract.js" target="_blank">Tesseract.js</a> |
+               无需安装，完全在浏览器中运行 |
+               <a href="javascript:void(0)" onclick="showHelp()">使用帮助</a></p>
+        </div>
+    </div>
+
+    <script>
+        // DOM元素
+        const previewSection = document.getElementById('previewSection');
+        const previewImage = document.getElementById('previewImage');
+        const processingSection = document.getElementById('processingSection');
+        const resultSection = document.getElementById('resultSection');
+        const resultText = document.getElementById('resultText');
+        const errorSection = document.getElementById('errorSection');
+        const errorMessage = document.getElementById('errorMessage');
+        const progressFill = document.getElementById('progressFill');
+        const statusMessage = document.getElementById('statusMessage');
+
+        // 粘贴相关元素
+        const pasteBtn = document.getElementById('pasteBtn');
+        const autoExtract = document.getElementById('autoExtract');
+        const pasteIndicator = document.getElementById('pasteIndicator');
+
+        // 信息显示元素
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const imageDimensions = document.getElementById('imageDimensions');
+        const fileFormat = document.getElementById('fileFormat');
+
+        // 语言选择
+        const langChinese = document.getElementById('langChinese');
+        const langEnglish = document.getElementById('langEnglish');
+
+        // 格式化选项
+        const formatRemoveLineBreaks = document.getElementById('formatRemoveLineBreaks');
+
+        let selectedFile = null;
+        let tesseractWorker = null;
+        let currentLanguage = '';
+
+        // 初始化事件监听
+        function init() {
+            // 全局粘贴事件监听
+            document.addEventListener('paste', handlePasteEvent);
+
+            // 检查Tesseract.js是否可用并预加载OCR引擎
+            checkTesseractAvailability();
+
+            // 页面卸载时清理OCR Worker
+            window.addEventListener('beforeunload', cleanupOCRWorker);
+            window.addEventListener('pagehide', cleanupOCRWorker);
+        }
+
+        // 检查Tesseract.js可用性
+        async function checkTesseractAvailability() {
+            try {
+                // 简单检查Tesseract对象是否存在
+                if (typeof Tesseract === 'undefined') {
+                    showError('Tesseract.js 库加载失败，请检查网络连接');
+                    return;
+                }
+
+                console.log('Tesseract.js 已加载');
+
+                // 在后台预加载OCR引擎（不阻塞UI）
+                preloadOCRWorker();
+            } catch (error) {
+                console.error('Tesseract检查失败:', error);
+                showError('OCR引擎初始化失败: ' + error.message);
+            }
+        }
+
+        // 预加载OCR引擎
+        async function preloadOCRWorker() {
+            try {
+                // 如果已经预加载，则跳过
+                if (tesseractWorker) return;
+
+                console.log('开始预加载OCR引擎...');
+
+                // 创建worker但不加载语言，等需要时再加载
+                tesseractWorker = await Tesseract.createWorker({
+                    logger: (m) => handleProgress(m),
+                    errorHandler: (err) => {
+                        console.error('预加载Tesseract错误:', err);
+                        showError('OCR引擎预加载出错: ' + err.message);
+                    }
+                });
+
+                console.log('OCR引擎预加载完成');
+            } catch (error) {
+                console.error('OCR引擎预加载失败:', error);
+                // 不显示错误给用户，因为这是后台预加载
+            }
+        }
+
+        // 清理OCR Worker
+        async function cleanupOCRWorker() {
+            if (tesseractWorker) {
+                try {
+                    await tesseractWorker.terminate();
+                    console.log('OCR Worker已清理');
+                } catch (error) {
+                    console.error('清理OCR Worker失败:', error);
+                } finally {
+                    tesseractWorker = null;
+                    currentLanguage = '';
+                }
+            }
+        }
+
+        // 处理粘贴事件
+        async function handlePasteEvent(event) {
+            try {
+                const items = event.clipboardData.items;
+                if (!items || items.length === 0) {
+                    console.log('剪贴板中没有内容');
+                    return;
+                }
+
+                // 查找图片类型的数据
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    if (item.type.indexOf('image') !== -1) {
+                        event.preventDefault(); // 阻止默认粘贴行为
+
+                        const blob = item.getAsFile();
+                        if (!blob) {
+                            console.log('无法获取图片文件');
+                            return;
+                        }
+
+                        console.log('从剪贴板获取到图片:', blob.type, blob.size);
+
+                        // 处理图片
+                        await handleImageBlob(blob, 'clipboard_image.png');
+
+                        // 如果开启了自动提取，则开始OCR
+                        if (autoExtract.checked) {
+                            // 稍微延迟一下，确保预览已经显示
+                            setTimeout(() => {
+                                startOCR();
+                            }, 300);
+                        }
+                        return;
+                    }
+                }
+
+                console.log('剪贴板中没有图片');
+            } catch (error) {
+                console.error('粘贴处理失败:', error);
+                showError('粘贴图片失败: ' + error.message);
+            }
+        }
+
+        // 处理粘贴按钮点击
+        async function handlePasteClick() {
+            try {
+                // 检查剪贴板权限
+                if (!navigator.clipboard || !navigator.clipboard.read) {
+                    showError('您的浏览器不支持读取剪贴板，请使用Ctrl+V粘贴');
+                    return;
+                }
+
+                // 尝试读取剪贴板内容
+                const clipboardItems = await navigator.clipboard.read();
+
+                for (const clipboardItem of clipboardItems) {
+                    // 查找图片类型
+                    for (const type of clipboardItem.types) {
+                        if (type.startsWith('image/')) {
+                            const blob = await clipboardItem.getType(type);
+                            await handleImageBlob(blob, 'clipboard_image.png');
+
+                            // 如果开启了自动提取，则开始OCR
+                            if (autoExtract.checked) {
+                                setTimeout(() => {
+                                    startOCR();
+                                }, 300);
+                            }
+                            return;
+                        }
+                    }
+                }
+
+                showError('剪贴板中没有图片，请先截图');
+            } catch (error) {
+                console.error('粘贴按钮点击失败:', error);
+                showError('读取剪贴板失败: ' + error.message);
+            }
+        }
+
+        // 处理图片Blob（通用的图片处理函数）
+        async function handleImageBlob(blob, filename) {
+            // 验证文件类型
+            const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/bmp'];
+            if (!validTypes.includes(blob.type)) {
+                showError('不支持的图片格式 (PNG, JPG, JPEG, BMP)');
+                return;
+            }
+
+            // 验证文件大小 (10MB)
+            if (blob.size > 10 * 1024 * 1024) {
+                showError('图片大小不能超过 10MB');
+                return;
+            }
+
+            // 创建File对象（与文件上传保持一致）
+            const file = new File([blob], filename, { type: blob.type });
+            selectedFile = file;
+
+            // 显示预览
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImage.src = e.target.result;
+                previewSection.style.display = 'block';
+                resultSection.style.display = 'none';
+                errorSection.style.display = 'none';
+
+                // 显示文件信息
+                fileName.textContent = filename;
+                fileSize.textContent = formatFileSize(blob.size);
+                fileFormat.textContent = blob.type.split('/')[1].toUpperCase();
+
+                // 获取图片尺寸
+                const img = new Image();
+                img.onload = () => {
+                    imageDimensions.textContent = `${img.width} × ${img.height} 像素`;
+
+                    // 显示粘贴成功提示
+                    if (filename === 'clipboard_image.png') {
+                        pasteIndicator.style.display = 'block';
+                        setTimeout(() => {
+                            pasteIndicator.style.display = 'none';
+                        }, 3000);
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(blob);
+        }
+
+
+        // 开始OCR处理
+        async function startOCR() {
+            if (!selectedFile) return;
+
+            const startTime = Date.now();
+
+            // 隐藏其他区域，显示处理进度
+            previewSection.style.display = 'none';
+            resultSection.style.display = 'none';
+            errorSection.style.display = 'none';
+            processingSection.style.display = 'block';
+
+            // 重置进度条
+            progressFill.style.width = '0%';
+            statusMessage.textContent = '正在初始化OCR引擎...';
+
+            try {
+
+                // 设置语言
+                const languages = [];
+                if (langChinese.checked) languages.push('chi_sim');
+                if (langEnglish.checked) languages.push('eng');
+
+                if (languages.length === 0) {
+                    showError('请至少选择一种语言');
+                    return;
+                }
+
+                const targetLanguage = languages.join('+');
+
+                // 只有语言改变时才重新加载
+                if (!tesseractWorker || currentLanguage !== targetLanguage) {
+                    if (!tesseractWorker) {
+                        tesseractWorker = await Tesseract.createWorker({
+                            logger: (m) => handleProgress(m),
+                            errorHandler: (err) => {
+                                console.error('Tesseract错误:', err);
+                                showError('OCR处理出错: ' + err.message);
+                            }
+                        });
+                    }
+
+                    // 加载并初始化语言
+                    await tesseractWorker.loadLanguage(targetLanguage);
+                    await tesseractWorker.initialize(targetLanguage);
+                    currentLanguage = targetLanguage;
+                }
+
+                // 读取文件数据
+                const imageData = await readFileAsDataURL(selectedFile);
+
+                statusMessage.textContent = '正在识别文字...';
+
+                // 执行OCR识别（使用优化参数加快速度）
+                const result = await tesseractWorker.recognize(imageData, {
+                    tessedit_pageseg_mode: 6, // 假设为单一统一文本块
+                    tessedit_ocr_engine_mode: 1, // 使用神经网络+LSTM引擎
+                });
+
+                // 显示结果
+                showResult(result.data.text);
+
+                const processingTime = Date.now() - startTime;
+                console.log(`OCR处理耗时: ${processingTime}ms`);
+                if (processingTime > 2000) {
+                    console.warn(`处理时间超过2秒: ${processingTime}ms`);
+                }
+
+            } catch (error) {
+                console.error('OCR处理失败:', error);
+                showError('文字提取失败: ' + error.message);
+            } finally {
+                processingSection.style.display = 'none';
+            }
+        }
+
+        // 处理进度更新
+        function handleProgress(message) {
+            console.log('OCR进度:', message);
+
+            if (message.status === 'loading language') {
+                statusMessage.textContent = `正在加载语言包: ${message.lang}`;
+                progressFill.style.width = '30%';
+            } else if (message.status === 'initializing api') {
+                statusMessage.textContent = '正在初始化API...';
+                progressFill.style.width = '50%';
+            } else if (message.status === 'recognizing text') {
+                statusMessage.textContent = '正在识别文字...';
+                progressFill.style.width = '70%';
+            } else if (message.status === 'done') {
+                statusMessage.textContent = '处理完成，正在整理结果...';
+                progressFill.style.width = '100%';
+            }
+        }
+
+        // 格式化OCR文本
+        function formatOCRText(text) {
+            if (!text) return text;
+
+            let formatted = text;
+
+            // 如果启用了格式化选项
+            if (formatRemoveLineBreaks && formatRemoveLineBreaks.checked) {
+                // 去除所有换行符和回车符
+                formatted = formatted.replace(/[\r\n]+/g, '');
+                // 去除所有空格（包括全角和半角空格）
+                formatted = formatted.replace(/[ 　]+/g, '');
+            }
+
+            return formatted;
+        }
+
+        // 显示结果
+        function showResult(text) {
+            if (!text || text.trim() === '') {
+                showError('未检测到文字，请确认图片包含可识别的文本');
+                return;
+            }
+
+            // 格式化文本
+            const formattedText = formatOCRText(text);
+            resultText.textContent = formattedText;
+            resultSection.style.display = 'block';
+
+            // 滚动到结果区域
+            resultSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 复制结果到剪贴板
+        async function copyResult() {
+            const text = resultText.textContent;
+            try {
+                await navigator.clipboard.writeText(text);
+                alert('已复制到剪贴板！');
+            } catch (err) {
+                console.error('复制失败:', err);
+                alert('复制失败，请手动选择文本复制');
+            }
+        }
+
+        // 清空所有内容
+        function clearAll() {
+            selectedFile = null;
+            previewImage.src = '';
+            resultText.textContent = '';
+            previewSection.style.display = 'none';
+            resultSection.style.display = 'none';
+            errorSection.style.display = 'none';
+
+            // 重置文件信息
+            fileName.textContent = '';
+            fileSize.textContent = '';
+            imageDimensions.textContent = '';
+            fileFormat.textContent = '';
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorSection.style.display = 'block';
+
+            // 滚动到错误区域
+            errorSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 显示使用帮助
+        function showHelp() {
+            alert(`使用说明：
+
+📋 快捷粘贴方式：
+1. 截图后（如使用 Windows: Win+Shift+S, macOS: Cmd+Shift+4）
+2. 在页面任意位置按 Ctrl+V 粘贴
+3. 图片会自动上传并开始提取文字（如果开启了"自动提取"选项）
+
+🎯 其他功能：
+- 选择需要识别的语言（默认中英文都选中）
+- 点击"粘贴截图并提取文字"按钮手动粘贴
+- 开启/关闭"粘贴后自动开始提取"选项
+- 处理完成后点击"复制"按钮将结果复制到剪贴板
+- 点击"清空"按钮重置所有内容
+
+注意事项：
+- 支持 PNG、JPG、JPEG、BMP 格式
+- 图片大小不超过 10MB
+- 图片越清晰，文字识别越准确
+- 首次使用需要加载语言包，请耐心等待`);
+        }
+
+        // 工具函数：读取文件为DataURL
+        function readFileAsDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(e);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 工具函数：格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
